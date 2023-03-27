@@ -10,38 +10,53 @@ definition complexities.
 Instead, we want to generate all the necessary definitions by only providing
 a slimmed down configuration via helm values.
 
-## Example
+## Install
 
-```
-globals:
-  labels:
-    app: nginx
+1. Install the helm repository by running  
+   ```shell
+   helm repo add helm-interface https://kickthemooon.github.io/helm-interface
+   ```
+2. Add it as a dependency to your `Chart.yaml`  
+   ```yaml
+   dependencies:
+     - name: helm-interface
+       version: 0.1.0
+       repository: https://kickthemooon.github.io/helm-interface
+   ```
 
-defaults:
-  image:
-    registry: nginx
-    tag: latest
+## Example Usage
 
-workloads:
-  - name: nginx
-    enabled: true
-    deployment:
-      enabled: true
-      pod:
-        containers:
-          - name: nginx
-            ports:
-              - containerPort: 80
-                service:
-                  enabled: true
-                ingress:
-                  enabled: true
-                  tlds:
-                    - .com
-                  hosts:
-                    prefix: www.example
-                    paths:
-                      - value: /
+```yaml
+interface:
+   globals:
+     labels:
+       app: nginx
+   
+   defaults:
+     image:
+       registry: nginx
+       tag: latest
+   
+   workloads:
+     - name: nginx
+       enabled: true
+       deployment:
+         enabled: true
+         pod:
+           containers:
+             - name: nginx
+               ports:
+                 - containerPort: 80
+                   service:
+                     enabled: true
+                   ingress:
+                     enabled: true
+                     tlds:
+                       - .com
+                     hosts:
+                       prefix: www.example
+                       paths:
+                         - value: /
 ```
 
 Providing the above configuration will generate
