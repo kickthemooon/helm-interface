@@ -1,0 +1,802 @@
+{{/*
+Chart name
+*/}}
+{{- define "chart.name" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Common labels
+*/}}
+{{- define "chart.labels" -}}
+helm.sh/chart: {{ include "chart.name" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- if hasKey .Values.globals "labels" }}
+{{ toYaml .Values.globals.labels }}
+{{- end }}
+{{- end }}
+
+{{- $globals := .Values.globals }}
+{{- $defaults := .Values.defaults }}
+{{- $releaseName := .Release.Name }}
+{{- $chart := .Chart }}
+{{- $defaultPortName := "port" }}
+
+{{- /* START DEPLOYMENT GROUP OF OBJECTS */}}
+{{- range .Values.workloads }}
+{{- $computedDeploymentName := printf "%s-%s" $releaseName .name }}
+{{- if .deployment.enabled }}
+{{- /* START DEPLOYMENT */}}
+---
+apiVersion: {{ default "apps/v1" .deployment.apiVersion }}
+kind: Deployment
+metadata:
+  name: {{ $computedDeploymentName }}
+  labels:
+    app: {{ $computedDeploymentName }}
+    {{- if .deployment.labels }}
+    {{- toYaml .deployment.labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .deployment.annotations }}
+    {{- toYaml .deployment.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if not (.autoscaling).enabled }}
+  replicas: {{ .deployment.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ $computedDeploymentName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $computedDeploymentName }}
+        {{- if .deployment.pod.labels }}
+        {{- toYaml .deployment.pod.labels | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- if .deployment.pod.annotations }}
+        {{- toYaml .deployment.pod.annotations | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+      {{- range .deployment.pod.containers }}
+        {{- $registry := (empty (.image).registry) | ternary (default "" ($defaults.image).registry) (.image).registry }}
+        {{- $tag := (empty (.image).tag) | ternary (default "" ((default false ($defaults.image).useAppVersion) | ternary $chart.AppVersion ($defaults.image).tag)) (.image).tag }}
+        - name: {{ .name }}
+          image: {{ printf "%s:%s" $registry $tag }}
+          {{- if hasKey . "imagePullPolicy" }}
+          imagePullPolicy: {{ .imagePullPolicy }}
+          {{- else }}
+          imagePullPolicy: {{ default "IfNotPresent" $globals.imagePullPolicy }}
+          {{- end }}
+          {{- if hasKey . "command" }}
+          {{- toYaml .command | nindent 10 }}
+          {{- end }}
+          {{- range .ports }}
+          {{- $portName := default $defaultPortName .name }}
+          ports:
+            - containerPort: {{ .containerPort }}
+              name: {{ $portName }}
+          {{- end }}
+          {{- if hasKey . "livenessProbe" }}
+          livenessProbe:
+            {{- with .livenessProbe.exec }}
+            exec:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .livenessProbe.httpGet }}
+            httpGet:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .livenessProbe.tcpSocket }}
+            tcpSocket:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .livenessProbe.grpc }}
+            grpc:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            initialDelaySeconds: {{ default $defaults.livenessProbe.initialDelaySeconds .livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ default $defaults.livenessProbe.periodSeconds .livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ default $defaults.livenessProbe.timeoutSeconds .livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ default $defaults.livenessProbe.failureThreshold .livenessProbe.failureThreshold }}
+            successThreshold: {{ default $defaults.livenessProbe.successThreshold .livenessProbe.successThreshold }}
+          {{- end }}
+          {{- if hasKey . "readinessProbe" }}
+          readinessProbe:
+            {{- with .readinessProbe.exec }}
+            exec:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .readinessProbe.httpGet }}
+            httpGet:
+                {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .readinessProbe.tcpSocket }}
+            tcpSocket:
+                {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .readinessProbe.grpc }}
+            grpc:
+                {{- toYaml . | nindent 14 }}
+            {{- end }}
+            initialDelaySeconds: {{ default $defaults.readinessProbe.initialDelaySeconds .readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ default $defaults.readinessProbe.periodSeconds .readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ default $defaults.readinessProbe.timeoutSeconds .readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ default $defaults.readinessProbe.failureThreshold .readinessProbe.failureThreshold }}
+            successThreshold: {{ default $defaults.readinessProbe.successThreshold .readinessProbe.successThreshold }}
+          {{- end }}
+          {{- if hasKey . "resources" }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- else if hasKey $defaults "resources" }}
+          resources:
+            {{- toYaml $defaults.resources | nindent 12 }}
+          {{- end }}
+          {{- if hasKey . "volumeMounts" }}
+          volumeMounts:
+            {{- toYaml .volumeMounts | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      serviceAccountName: {{ default "default" .deployment.pod.serviceAccountName }}
+      terminationGracePeriodSeconds: {{ default 30 .deployment.pod.terminationGracePeriodSeconds }}
+      {{- with .deployment.pod.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .deployment.pod.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .deployment.pod.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .deployment.pod.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- /* END DEPLOYMENT */}}
+
+{{- /* START SERVICE */}}
+{{- range .deployment.pod.containers }}
+{{- range .ports }}
+{{- $portName := default $defaultPortName .name }}
+{{- if and (hasKey . "service") .service.enabled }}
+{{- $computedNameService := ternary $computedDeploymentName (printf "%s-%s" $computedDeploymentName .service.nameSuffix) (empty .service.nameSuffix) }}
+---
+apiVersion: {{ default "v1" .service.apiVersion }}
+kind: Service
+metadata:
+  name: {{ $computedNameService }}
+  labels:
+    {{- if .service.labels }}
+    {{- toYaml .service.labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .service.annotations }}
+    {{- toYaml .service.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ default "ClusterIP" .service.type }}
+  ports:
+    - port: {{ default .containerPort .service.port }}
+      targetPort: {{ .containerPort }}
+      protocol: {{ default "TCP" .protocol }}
+      {{- if hasKey . "name" }}
+      name: {{ .name }}
+      {{- end }}
+  selector:
+    app: {{ $computedDeploymentName }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- /* END SERVICES */}}
+
+{{- /* START INGRESS */}}
+{{- range .deployment.pod.containers }}
+{{- range .ports }}
+{{- $portName := default $defaultPortName .name }}
+{{- if and (hasKey . "ingress") .ingress.enabled }}
+{{- $computedNameIngress := ternary $computedDeploymentName (printf "%s-%s" $computedDeploymentName .ingress.nameSuffix) (empty .ingress.nameSuffix) }}
+{{- $computedNameService := ternary $computedDeploymentName (printf "%s-%s" $computedDeploymentName .service.nameSuffix) (empty .service.nameSuffix) }}
+---
+apiVersion: {{ default "networking.k8s.io/v1" .ingress.apiVersion }}
+kind: Ingress
+metadata:
+  name: {{ $computedNameIngress }}
+  labels:
+    {{- if .ingress.labels }}
+    {{- toYaml .ingress.labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .ingress.annotations }}
+    {{- toYaml .ingress.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .ingress.tls }}
+  tls:
+    {{- range .ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- $hosts := .ingress.hosts }}
+    {{- range .ingress.tlds }}
+    - host: {{ $hosts.prefix }}{{ . }}
+      http:
+        paths:
+          {{- range $hosts.paths }}
+          - path: {{ .value }}
+            pathType: {{ default "Prefix" .type }}
+            backend:
+              service:
+                name: {{ $computedNameService }}
+                port:
+                  name: {{ $portName }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- /* END INGRESS */}}
+
+{{- /* START HPA */}}
+{{- if hasKey . "autoscaling" }}
+{{- if .autoscaling.enabled }}
+---
+apiVersion: {{ default "autoscaling/v2" .autoscaling.apiVersion }}
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $computedDeploymentName }}
+  labels:
+    {{- if .autoscaling.labels }}
+    {{- toYaml .autoscaling.labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .autoscaling.annotations }}
+    {{- toYaml .autoscaling.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  scaleTargetRef:
+    apiVersion: {{ default "apps/v1" .deployment.apiVersion }}
+    kind: Deployment
+    name: {{ $computedDeploymentName }}
+  minReplicas: {{ .autoscaling.minReplicas }}
+  maxReplicas: {{ .autoscaling.maxReplicas }}
+  metrics:
+    {{- toYaml .autoscaling.metrics | nindent 4 }}
+{{ end }}
+{{ end }}
+{{- /* END HPA */}}
+
+{{- end }}
+{{- end }}
+{{- /* START DEPLOYMENT GROUP OF OBJECTS */}}
+
+{{- /* START SERVICE */}}
+{{- range .Values.services }}
+---
+apiVersion: {{ default "v1" .apiVersion }}
+kind: Service
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- if hasKey . "labels" }}
+    {{- toYaml .labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if hasKey . "annotations" }}
+    {{- toYaml .annotations | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ default "ClusterIP" .type }}
+  {{- if hasKey . "ports" }}
+  ports:
+    {{- range .ports }}
+    - targetPort: {{ default .port .targetPort }}
+      port: {{ .port }}
+      protocol: {{ default "TCP" .protocol }}
+    {{- end }}
+  {{- end }}
+  {{- if hasKey . "selector" }}
+  selector:
+    {{- toYaml .selector | nindent 4 }}
+  {{- end }}
+  {{- if hasKey . "externalName" }}
+  externalName: {{ .externalName }}
+  {{- end }}
+{{- end }}
+{{- /* END SERVICES */}}
+
+{{- /* START CONFIG MAPS */}}
+{{- range .Values.configMaps }}
+{{- if .enabled }}
+---
+apiVersion: {{ default "v1" .apiVersion }}
+kind: ConfigMap
+metadata:
+  name: {{ $releaseName }}-{{ .name }}
+  labels:
+    {{- if .labels }}
+    {{- toYaml .labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .annotations }}
+    {{- toYaml .annotations | nindent 4 }}
+    {{- end }}
+data:
+  {{- if hasKey . "data" }}
+  {{- toYaml .data | nindent 2 }}
+  {{ end }}
+{{- end }}
+{{- end }}
+{{- /* END CONFIG MAPS */}}
+
+{{- /* START SECRETS */}}
+{{- range .Values.secrets }}
+{{- if .enabled }}
+---
+apiVersion: {{ default "v1" .apiVersion }}
+kind: Secret
+metadata:
+  name: {{ $releaseName }}-{{ .name }}
+  labels:
+    {{- if .labels }}
+    {{- toYaml .labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .annotations }}
+    {{- toYaml .annotations | nindent 4 }}
+    {{- end }}
+type: {{ .type }}
+data:
+  {{- if hasKey . "data" }}
+  {{- toYaml .data | nindent 2 }}
+  {{ end }}
+{{- end }}
+{{- end }}
+{{- /* END SECRETS */}}
+
+{{- /* START SERVICE ACCOUNTS */}}
+{{- range .Values.serviceAccounts }}
+{{- if .enabled }}
+---
+apiVersion: {{ default "v1" .apiVersion }}
+kind: ServiceAccount
+metadata:
+  name: {{ $releaseName }}-{{ .name }}
+  labels:
+    {{- if .labels }}
+    {{- toYaml .labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .annotations }}
+    {{- toYaml .annotations | nindent 4 }}
+    {{- end }}
+imagePullSecrets:
+  {{- if .imagePullSecrets }}
+  {{- toYaml .imagePullSecrets | nindent 2 }}
+  {{- end }}
+  {{- if $globals.imagePullSecrets }}
+  {{- toYaml $globals.imagePullSecrets | nindent 2 }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- /* END SERVICE ACCOUNTS */}}
+
+{{- /* START JOBS */}}
+{{- range .Values.jobs }}
+{{- if .enabled }}
+---
+apiVersion: {{ default "batch/v1" .apiVersion }}
+kind: Job
+metadata:
+  name: {{ $releaseName }}-{{ .name }}
+  labels:
+    {{- if .labels }}
+    {{- toYaml .labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .annotations }}
+    {{- toYaml .annotations | nindent 4 }}
+    {{- end }}
+spec:
+  template:
+    metadata:
+      labels:
+        {{- if (.pod).labels }}
+        {{- toYaml .pod.labels | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- if (.pod).annotations }}
+        {{- toYaml .pod.annotations | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+        {{- range .containers }}
+        {{- $registry := (empty (.image).registry) | ternary (default "" ($defaults.image).registry) (.image).registry }}
+        {{- $tag := (empty (.image).tag) | ternary (default "" ((default false ($defaults.image).useAppVersion) | ternary $chart.AppVersion ($defaults.image).tag)) (.image).tag }}
+        - name: {{ .name }}
+          image: {{ printf "%s:%s" $registry $tag }}
+          {{- if hasKey . "imagePullPolicy" }}
+          imagePullPolicy: {{ .imagePullPolicy }}
+          {{- else }}
+          imagePullPolicy: {{ default "IfNotPresent" $globals.imagePullPolicy }}
+          {{- end }}
+          {{- if hasKey . "command" }}
+          {{- toYaml .command | nindent 10 }}
+          {{- end }}
+          {{- range .ports }}
+          {{- $portName := default $defaultPortName .name }}
+          ports:
+            - containerPort: {{ .containerPort }}
+              name: {{ $portName }}
+          {{- end }}
+          {{- if hasKey . "livenessProbe" }}
+          livenessProbe:
+            {{- with .livenessProbe.exec }}
+            exec:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .livenessProbe.httpGet }}
+            httpGet:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .livenessProbe.tcpSocket }}
+            tcpSocket:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .livenessProbe.grpc }}
+            grpc:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            initialDelaySeconds: {{ default $defaults.livenessProbe.initialDelaySeconds .livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ default $defaults.livenessProbe.periodSeconds .livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ default $defaults.livenessProbe.timeoutSeconds .livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ default $defaults.livenessProbe.failureThreshold .livenessProbe.failureThreshold }}
+            successThreshold: {{ default $defaults.livenessProbe.successThreshold .livenessProbe.successThreshold }}
+          {{- end }}
+          {{- if hasKey . "readinessProbe" }}
+          readinessProbe:
+            {{- with .readinessProbe.exec }}
+            exec:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .readinessProbe.httpGet }}
+            httpGet:
+                {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .readinessProbe.tcpSocket }}
+            tcpSocket:
+                {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .readinessProbe.grpc }}
+            grpc:
+                {{- toYaml . | nindent 14 }}
+            {{- end }}
+            initialDelaySeconds: {{ default $defaults.readinessProbe.initialDelaySeconds .readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ default $defaults.readinessProbe.periodSeconds .readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ default $defaults.readinessProbe.timeoutSeconds .readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ default $defaults.readinessProbe.failureThreshold .readinessProbe.failureThreshold }}
+            successThreshold: {{ default $defaults.readinessProbe.successThreshold .readinessProbe.successThreshold }}
+          {{- end }}
+          {{- if hasKey . "resources" }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- else if hasKey $defaults "resources" }}
+          resources:
+            {{- toYaml $defaults.resources | nindent 12 }}
+          {{- end }}
+          {{- if hasKey . "volumeMounts" }}
+          volumeMounts:
+            {{- toYaml .volumeMounts | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      serviceAccountName: {{ default "default" .serviceAccountName }}
+      terminationGracePeriodSeconds: {{ default 30 .terminationGracePeriodSeconds }}
+      restartPolicy: {{ default "Never" .restartPolicy }}
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  backoffLimit: {{ default 1 .backoffLimit }}
+{{- end }}
+{{- end }}
+{{- /* END JOBS */}}
+
+{{- /* START CRONJOBS */}}
+{{- range .Values.cronjobs }}
+{{- if .enabled }}
+---
+apiVersion: {{ default "batch/v1" .apiVersion }}
+kind: CronJob
+metadata:
+  name: {{ $releaseName }}-{{ .name }}
+  labels:
+    {{- if .labels }}
+    {{- toYaml .labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .annotations }}
+    {{- toYaml .annotations | nindent 4 }}
+    {{- end }}
+spec:
+  schedule: {{ .schedule }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- if (.pod).labels }}
+            {{- toYaml .pod.labels | nindent 12 }}
+            {{- end }}
+          annotations:
+            {{- if (.pod).annotations }}
+            {{- toYaml .pod.annotations | nindent 12 }}
+            {{- end }}
+        spec:
+          containers:
+            {{- range .containers }}
+            {{- $registry := (empty (.image).registry) | ternary (default "" ($defaults.image).registry) (.image).registry }}
+            {{- $tag := (empty (.image).tag) | ternary (default "" ((default false ($defaults.image).useAppVersion) | ternary $chart.AppVersion ($defaults.image).tag)) (.image).tag }}
+            - name: {{ .name }}
+              image: {{ printf "%s:%s" $registry $tag }}
+              {{- if hasKey . "imagePullPolicy" }}
+              imagePullPolicy: {{ .imagePullPolicy }}
+              {{- else }}
+              imagePullPolicy: {{ default "IfNotPresent" $globals.imagePullPolicy }}
+              {{- end }}
+              {{- if hasKey . "command" }}
+              {{- toYaml .command | nindent 14 }}
+              {{- end }}
+              {{- range .ports }}
+              {{- $portName := default $defaultPortName .name }}
+              ports:
+                - containerPort: {{ .containerPort }}
+                  name: {{ $portName }}
+              {{- end }}
+              {{- if hasKey . "livenessProbe" }}
+              livenessProbe:
+                {{- with .livenessProbe.exec }}
+                exec:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                {{- with .livenessProbe.httpGet }}
+                httpGet:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                {{- with .livenessProbe.tcpSocket }}
+                tcpSocket:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                {{- with .livenessProbe.grpc }}
+                grpc:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                initialDelaySeconds: {{ default $defaults.livenessProbe.initialDelaySeconds .livenessProbe.initialDelaySeconds }}
+                periodSeconds: {{ default $defaults.livenessProbe.periodSeconds .livenessProbe.periodSeconds }}
+                timeoutSeconds: {{ default $defaults.livenessProbe.timeoutSeconds .livenessProbe.timeoutSeconds }}
+                failureThreshold: {{ default $defaults.livenessProbe.failureThreshold .livenessProbe.failureThreshold }}
+                successThreshold: {{ default $defaults.livenessProbe.successThreshold .livenessProbe.successThreshold }}
+              {{- end }}
+              {{- if hasKey . "readinessProbe" }}
+              readinessProbe:
+                {{- with .readinessProbe.exec }}
+                exec:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                {{- with .readinessProbe.httpGet }}
+                httpGet:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                {{- with .readinessProbe.tcpSocket }}
+                tcpSocket:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                {{- with .readinessProbe.grpc }}
+                grpc:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                initialDelaySeconds: {{ default $defaults.readinessProbe.initialDelaySeconds .readinessProbe.initialDelaySeconds }}
+                periodSeconds: {{ default $defaults.readinessProbe.periodSeconds .readinessProbe.periodSeconds }}
+                timeoutSeconds: {{ default $defaults.readinessProbe.timeoutSeconds .readinessProbe.timeoutSeconds }}
+                failureThreshold: {{ default $defaults.readinessProbe.failureThreshold .readinessProbe.failureThreshold }}
+                successThreshold: {{ default $defaults.readinessProbe.successThreshold .readinessProbe.successThreshold }}
+              {{- end }}
+              {{- if hasKey . "resources" }}
+              resources:
+                {{- toYaml .resources | nindent 16 }}
+              {{- else if hasKey $defaults "resources" }}
+              resources:
+                {{- toYaml $defaults.resources | nindent 16 }}
+              {{- end }}
+              {{- if hasKey . "volumeMounts" }}
+              volumeMounts:
+                {{- toYaml .volumeMounts | nindent 16 }}
+              {{- end }}
+            {{- end }}
+          serviceAccountName: {{ default "default" .serviceAccountName }}
+          terminationGracePeriodSeconds: {{ default 30 .terminationGracePeriodSeconds }}
+          restartPolicy: {{ default "Never" .restartPolicy }}
+          {{- with .nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .volumes }}
+          volumes:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      backoffLimit: {{ default 1 .backoffLimit }}
+{{- end }}
+{{- end }}
+{{- /* END CRONJOBS */}}
+
+{{- /* START DAMEONSET */}}
+{{- range .Values.daemonsets }}
+{{- if .enabled }}
+---
+apiVersion: {{ default "apps/v1" .apiVersion }}
+kind: DaemonSet
+metadata:
+  name: {{ $releaseName }}-{{ .name }}
+  labels:
+    {{- if .labels }}
+    {{- toYaml .labels | nindent 4 }}
+    {{- end }}
+    {{- include "chart.labels" $ | nindent 4 }}
+  annotations:
+    {{- if .annotations }}
+    {{- toYaml .annotations | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      name: {{ $releaseName }}-{{ .name }}
+  template:
+    metadata:
+      labels:
+        name: {{ $releaseName }}-{{ .name }}
+        {{- if (.pod).labels }}
+        {{- toYaml .pod.labels | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- if (.pod).annotations }}
+        {{- toYaml .pod.annotations | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+        {{- range .containers }}
+        {{- $registry := (empty (.image).registry) | ternary (default "" ($defaults.image).registry) (.image).registry }}
+        {{- $tag := (empty (.image).tag) | ternary (default "" ((default false ($defaults.image).useAppVersion) | ternary $chart.AppVersion ($defaults.image).tag)) (.image).tag }}
+        - name: {{ .name }}
+          image: {{ printf "%s:%s" $registry $tag }}
+          {{- if hasKey . "imagePullPolicy" }}
+          imagePullPolicy: {{ .imagePullPolicy }}
+          {{- else }}
+          imagePullPolicy: {{ default "IfNotPresent" $globals.imagePullPolicy }}
+          {{- end }}
+          {{- if hasKey . "command" }}
+          {{- toYaml .command | nindent 10 }}
+          {{- end }}
+          {{- range .ports }}
+          {{- $portName := default $defaultPortName .name }}
+          ports:
+            - containerPort: {{ .containerPort }}
+              name: {{ $portName }}
+          {{- end }}
+          {{- if hasKey . "livenessProbe" }}
+          livenessProbe:
+            {{- with .livenessProbe.exec }}
+            exec:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .livenessProbe.httpGet }}
+            httpGet:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .livenessProbe.tcpSocket }}
+            tcpSocket:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .livenessProbe.grpc }}
+            grpc:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            initialDelaySeconds: {{ default $defaults.livenessProbe.initialDelaySeconds .livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ default $defaults.livenessProbe.periodSeconds .livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ default $defaults.livenessProbe.timeoutSeconds .livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ default $defaults.livenessProbe.failureThreshold .livenessProbe.failureThreshold }}
+            successThreshold: {{ default $defaults.livenessProbe.successThreshold .livenessProbe.successThreshold }}
+          {{- end }}
+          {{- if hasKey . "readinessProbe" }}
+          readinessProbe:
+            {{- with .readinessProbe.exec }}
+            exec:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .readinessProbe.httpGet }}
+            httpGet:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .readinessProbe.tcpSocket }}
+            tcpSocket:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .readinessProbe.grpc }}
+            grpc:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            initialDelaySeconds: {{ default $defaults.readinessProbe.initialDelaySeconds .readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ default $defaults.readinessProbe.periodSeconds .readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ default $defaults.readinessProbe.timeoutSeconds .readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ default $defaults.readinessProbe.failureThreshold .readinessProbe.failureThreshold }}
+            successThreshold: {{ default $defaults.readinessProbe.successThreshold .readinessProbe.successThreshold }}
+          {{- end }}
+          {{- if hasKey . "resources" }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- else if hasKey $defaults "resources" }}
+          resources:
+            {{- toYaml $defaults.resources | nindent 12 }}
+          {{- end }}
+          {{- if hasKey . "volumeMounts" }}
+          volumeMounts:
+            {{- toYaml .volumeMounts | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      serviceAccountName: {{ default "default" .serviceAccountName }}
+      terminationGracePeriodSeconds: {{ default 30 .terminationGracePeriodSeconds }}
+      {{- if hasKey . "tolerations" }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- else }}
+      tolerations:
+        - operator: "Exists"
+      {{- end }}
+      {{- with .volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- /* END DAMEONSET */}}
