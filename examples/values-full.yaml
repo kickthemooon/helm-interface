@@ -1,0 +1,231 @@
+# Global configuration applied to all
+# relevant resources
+globals:
+  # used as additional labels for all resources
+  labels:
+    global: label
+  # imagePullSecrets used in all service
+  # accounts and containers
+  imagePullSecrets:
+    - name: global
+
+# Default values if not specified otherwise
+defaults:
+  image:
+    registry: nginx
+    tag: latest
+    useAppVersion: true
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: 100Mi
+  livenessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+    timeoutSeconds: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 30
+    failureThreshold: 3
+    successThreshold: 1
+    timeoutSeconds: 3
+
+# Deployments list including deployment, hpa,
+# service and ingress
+deployments:
+  - name: nginx
+    enabled: true
+    deployment:
+      enabled: true
+      apiVersion: apps/v1 # optional
+      replicas: 1
+      labels: # optional
+        deployment: label
+      annotations: # optional
+        deployment: "annotation"
+      pod:
+        labels: # optional
+          pod: label
+        annotations: # optional
+          pod: "annotation"
+        containers:
+          - name: nginx
+            image:
+              registry: nginx
+              tag: 1.14.2
+            volumeMounts: # optional
+              - name: example-volume
+                mountPath: /some/path
+            ports:
+              - name: http # optional
+                containerPort: 80
+                protocol: TCP # optional default TCP
+                service:
+                  enabled: true
+                  port: 80 # optional default containerPort
+                  nameSuffix: suffix  # optional
+                  apiVersion: v1 # optional
+                  labels: # optional
+                    service: label
+                  annotations: # optional
+                    service: "annotation"
+                  type: ClusterIP # optional default ClusterIP
+                ingress:
+                  enabled: true
+                  apiVersion: networking.k8s.io/v1 # optional
+                  nameSuffix: suffix # optional
+                  annotations: # optional
+                    ingress: "annotation"
+                  labels: # optional
+                    ingress: label
+                  tlds:
+                    - .com
+                    - .net
+                    - .org
+                  hosts:
+                    prefix: www.example
+                    paths:
+                      - type: Prefix
+                        value: /some-path
+        volumes: # optional
+          - name: example-volume
+            emptyDir:
+              sizeLimit: 100Mi
+    autoscaling:
+      enabled: true
+      apiVersion: autoscaling/v2 # optional
+      labels: # optional
+        hpa: label
+      annotations: # optional
+        hpa: "annotation"
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 50
+
+# Services
+services:
+  - name: some-service
+    labels: # optional
+      service: label
+    annotations: # optional
+      service: "annotation"
+    type: ClusterIP
+    ports:
+      - port: 80
+        targetPort: 8080
+    selector:
+      app: my-app
+
+# Service accounts
+serviceAccounts:
+  - name: nginx
+    enabled: true
+    labels: # optional
+      serviceAccount: label
+    annotations: # optional
+      service: "annotation"
+    imagePullSecrets:
+      - name: service-account
+
+# Config maps
+configMaps: # optional
+  - name: app-env
+    enabled: true
+    labels: # optional
+      cm: label
+    annotations: # optional
+      cm: "annotation"
+    data: # optional
+      .env: |
+        # some comment
+        HELLO="hello"
+
+# Secrets
+secrets:
+  - name: some-secret
+    enabled: true
+    labels: # optional
+      secret: label
+    annotations: # optional
+      secret: "annotation"
+    type: Opaque # for other types checkout k8s docs
+    data:
+      someKey: aGVsbG8= # base64 encoded
+
+jobs:
+  - name: some-job
+    enabled: true
+    labels: # optional
+      job: label
+    annotations: # optional
+      job: "annotation"
+    pod:
+      labels: # optional
+        job: label
+      annotations: # optional
+        job: "annotation"
+    backoffLimit: 3
+    containers:
+      - name: nginx
+        image:
+          registry: nginx
+          tag: 1.14.2
+        volumeMounts: # optional
+          - name: example-volume
+            mountPath: /some/path
+    volumes: # optional
+      - name: example-volume
+        emptyDir:
+          sizeLimit: 100Mi
+
+cronjobs:
+  - name: some-cronjob
+    enabled: true
+    labels: # optional
+      cronjob: label
+    annotations: # optional
+      cronjob: "annotation"
+    schedule: "0 * * * *"
+    pod:
+      labels: # optional
+        cronjob: label
+      annotations: # optional
+        cronjob: "annotation"
+    containers:
+      - name: nginx
+        image:
+          registry: nginx
+          tag: 1.14.2
+        volumeMounts: # optional
+          - name: example-volume
+            mountPath: /some/path
+    volumes: # optional
+      - name: example-volume
+        emptyDir:
+          sizeLimit: 100Mi
+
+daemonsets:
+  - name: some-daemonset
+    enabled: true
+    labels: # optional
+      daemonset: label
+    annotations: # optional
+      daemonset: "annotation"
+    pod:
+      labels: # optional
+        daemonset: label
+      annotations: # optional
+        daemonset: "annotation"
+    containers:
+      - name: nginx
+        image:
+          registry: nginx
+          tag: 1.14.2
