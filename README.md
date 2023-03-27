@@ -22,6 +22,7 @@ a slimmed down configuration via helm values.
      - name: helm-interface
        version: 0.1.0
        repository: https://kickthemooon.github.io/helm-interface
+       alias: interface
    ```
 
 ## Example Usage
