@@ -29,10 +29,6 @@ a slimmed down configuration via helm values.
 
 ```yaml
 interface:
-   globals:
-     labels:
-       app: nginx
-   
    defaults:
      image:
        registry: nginx
