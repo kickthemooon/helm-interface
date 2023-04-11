@@ -84,6 +84,10 @@ spec:
             - containerPort: {{ .containerPort }}
               name: {{ $portName }}
           {{- end }}
+          {{- if hasKey . "env" }}
+          env:
+            {{- toYaml .env | nindent 12 }}
+          {{- end }}
           {{- if hasKey . "livenessProbe" }}
           livenessProbe:
             {{- with .livenessProbe.exec }}
@@ -451,6 +455,10 @@ spec:
             - containerPort: {{ .containerPort }}
               name: {{ $portName }}
           {{- end }}
+          {{- if hasKey . "env" }}
+          env:
+            {{- toYaml .env | nindent 12 }}
+          {{- end }}
           {{- if hasKey . "livenessProbe" }}
           livenessProbe:
             {{- with .livenessProbe.exec }}
@@ -586,6 +594,10 @@ spec:
               ports:
                 - containerPort: {{ .containerPort }}
                   name: {{ $portName }}
+              {{- end }}
+              {{- if hasKey . "env" }}
+              env:
+                {{- toYaml .env | nindent 16 }}
               {{- end }}
               {{- if hasKey . "livenessProbe" }}
               livenessProbe:
@@ -725,6 +737,10 @@ spec:
               name: {{ $portName }}
           {{- end }}
           {{- if hasKey . "livenessProbe" }}
+          {{- if hasKey . "env" }}
+          env:
+            {{- toYaml .env | nindent 12 }}
+          {{- end }}
           livenessProbe:
             {{- with .livenessProbe.exec }}
             exec:
