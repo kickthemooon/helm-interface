@@ -3,6 +3,16 @@ entries:
   helm-interface:
   - apiVersion: v2
     appVersion: 0.0.1
+    created: "2023-04-11T22:16:01.923271721Z"
+    description: An opinionated general purpose helm chart
+    digest: a9f2f81791ab490d2548edc95de2d34e823b2d7f2cfa0fa2a12b23bc438ec02c
+    name: helm-interface
+    type: application
+    urls:
+    - https://github.com/kickthemooon/helm-interface/releases/download/helm-interface-0.1.1/helm-interface-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
+    appVersion: 0.0.1
     created: "2023-03-27T15:45:00.075501962Z"
     description: An opinionated general purpose helm chart
     digest: db0e4d62c2e802eb0e32455cf7a049aaedd2e5d72701b986658d1646a3df3c54
@@ -11,4 +21,4 @@ entries:
     urls:
     - https://github.com/kickthemooon/helm-interface/releases/download/helm-interface-0.1.0/helm-interface-0.1.0.tgz
     version: 0.1.0
-generated: "2023-03-27T15:45:00.075507562Z"
+generated: "2023-04-11T22:16:01.923282221Z"
