@@ -50,14 +50,14 @@ interface:
           - containerPort: 80
             service:
               enabled: true
-              ingress:
-                enabled: true
-                tlds:
-                - .com
-                hosts:
-                  prefix: www.example
-                  paths:
-                  - value: /
+            ingress:
+              enabled: true
+              tlds:
+              - .com
+              hosts:
+                prefix: www.example
+                paths:
+                - value: /
 ```
 
 Providing the above configuration will generate
