@@ -29,31 +29,35 @@ a slimmed down configuration via helm values.
 
 ```yaml
 interface:
-   defaults:
-     image:
-       registry: nginx
-       tag: latest
+  globals:
+    labels:
+      app: nginx
+
+  defaults:
+    image:
+      registry: nginx
+      tag: latest
    
-   workloads:
-     - name: nginx
-       enabled: true
-       deployment:
-         enabled: true
-         pod:
-           containers:
-             - name: nginx
-               ports:
-                 - containerPort: 80
-                   service:
-                     enabled: true
-                   ingress:
-                     enabled: true
-                     tlds:
-                       - .com
-                     hosts:
-                       prefix: www.example
-                       paths:
-                         - value: /
+  workloads:
+  - name: nginx
+    enabled: true
+    deployment:
+      enabled: true
+      pod:
+        containers:
+        - name: nginx
+          ports:
+          - containerPort: 80
+            service:
+              enabled: true
+              ingress:
+                enabled: true
+                tlds:
+                - .com
+                hosts:
+                  prefix: www.example
+                  paths:
+                  - value: /
 ```
 
 Providing the above configuration will generate
