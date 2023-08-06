@@ -205,6 +205,7 @@ spec:
 {{- range .deployment.pod.containers }}
 {{- range .ports }}
 {{- $portName := default $defaultPortName .name }}
+{{- $portNumber := default .containerPort .service.port }}
 {{- if and (hasKey . "ingress") .ingress.enabled }}
 {{- $computedNameIngress := ternary $computedDeploymentName (printf "%s-%s" $computedDeploymentName .ingress.nameSuffix) (empty .ingress.nameSuffix) }}
 {{- $computedNameService := ternary $computedDeploymentName (printf "%s-%s" $computedDeploymentName .service.nameSuffix) (empty .service.nameSuffix) }}
@@ -246,7 +247,7 @@ spec:
               service:
                 name: {{ $computedNameService }}
                 port:
-                  number: {{ default .containerPort .service.port }}
+                  number: {{ $portNumber }}
           {{- end }}
     {{- end }}
 {{- end }}
