@@ -194,9 +194,7 @@ spec:
     - port: {{ default .containerPort .service.port }}
       targetPort: {{ .containerPort }}
       protocol: {{ default "TCP" .protocol }}
-      {{- if hasKey . "name" }}
-      name: {{ .name }}
-      {{- end }}
+      name: {{ $portName }}
   selector:
     app: {{ $computedDeploymentName }}
 {{- end }}
