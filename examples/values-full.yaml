@@ -35,7 +35,8 @@ defaults:
 # Deployments list including deployment, hpa,
 # service and ingress
 deployments:
-  - name: nginx
+  nginx:
+    name: nginx
     enabled: true
     deployment:
       enabled: true

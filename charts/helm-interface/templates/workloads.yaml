@@ -171,8 +171,9 @@ spec:
 {{- /* START SERVICE */}}
 {{- range .deployment.pod.containers }}
 {{- range .ports }}
+{{- if and (hasKey . "service") }}
+{{- if .service.enabled }}
 {{- $portName := default $defaultPortName .name }}
-{{- if and (hasKey . "service") .service.enabled }}
 {{- $computedNameService := ternary $computedDeploymentName (printf "%s-%s" $computedDeploymentName .service.nameSuffix) (empty .service.nameSuffix) }}
 ---
 apiVersion: {{ default "v1" .service.apiVersion }}
@@ -199,14 +200,16 @@ spec:
 {{- end }}
 {{- end }}
 {{- end }}
+{{- end }}
 {{- /* END SERVICES */}}
 
 {{- /* START INGRESS */}}
 {{- range .deployment.pod.containers }}
 {{- range .ports }}
+{{- if (hasKey . "ingress") }}
+{{- if .ingress.enabled }}
 {{- $portName := default $defaultPortName .name }}
 {{- $portNumber := default .containerPort .service.port }}
-{{- if and (hasKey . "ingress") .ingress.enabled }}
 {{- $computedNameIngress := ternary $computedDeploymentName (printf "%s-%s" $computedDeploymentName .ingress.nameSuffix) (empty .ingress.nameSuffix) }}
 {{- $computedNameService := ternary $computedDeploymentName (printf "%s-%s" $computedDeploymentName .service.nameSuffix) (empty .service.nameSuffix) }}
 ---
@@ -250,6 +253,7 @@ spec:
                   number: {{ $portNumber }}
           {{- end }}
     {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

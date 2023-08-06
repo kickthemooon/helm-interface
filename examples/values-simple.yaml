@@ -8,7 +8,8 @@ defaults:
     tag: latest
 
 workloads:
-  - name: nginx
+  nginx:
+    name: nginx
     enabled: true
     deployment:
       enabled: true
